@@ -27,6 +27,7 @@
 #include "debounce.h"
 #include "pn532.h"
 #include <stdio.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -116,28 +117,17 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  {
-	      uint8_t msg[64];
-	      int n = snprintf((char*)msg, sizeof(msg), "Scanning I2C bus...\r\n");
-	      HAL_UART_Transmit(&huart2, msg, n, HAL_MAX_DELAY);
-
-	      int found = 0;
-	      for (uint8_t addr = 1; addr < 128; addr++) {
-	          if (HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(addr << 1), 2, 20) == HAL_OK) {
-	              n = snprintf((char*)msg, sizeof(msg), "  Found device at 0x%02X\r\n", addr);
-	              HAL_UART_Transmit(&huart2, msg, n, HAL_MAX_DELAY);
-	              found++;
-	          }
-	      }
-	      if (found == 0) {
-	          n = snprintf((char*)msg, sizeof(msg), "Nothing found on the bus at all.\r\n");
-	          HAL_UART_Transmit(&huart2, msg, n, HAL_MAX_DELAY);
-	      }
-	  }
-
-	  HAL_Delay(500);
 	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
-		HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+		if (cardUIDLength == sizeof(TAG_UID) &&
+			memcmp(cardUID, TAG_UID, cardUIDLength)) {
+			HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+
+		}
+
+		if (cardUIDLength == sizeof(TAG_UID) &&
+			memcmp(cardUID, CARD_UID, cardUIDLength)) {
+			HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_4);
+		}
 	}
   }
   /* USER CODE END 3 */
@@ -297,7 +287,7 @@ static void MX_GPIO_Init(void)
                           |COL4_Pin|LCD_CRS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10|GPIO_PIN_4, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, LCD_CRW_Pin|LCD_D4_Pin|LCD_D5_Pin|LCD_D6_Pin
@@ -327,8 +317,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : PB10 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10;
+  /*Configure GPIO pins : PB10 PB4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
