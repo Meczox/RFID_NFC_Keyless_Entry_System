@@ -1,7 +1,7 @@
 typedef enum {
     AUTH_DENIED = 0,
     AUTH_USER_ENTRY,
-    AUTH_ADMIN_OVERRIDE
+    AUTH_ADMIN_OVERRIDEcas
 } AuthStatus_t;
 
 typedef enum {
