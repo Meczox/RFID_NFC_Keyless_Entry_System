@@ -6,7 +6,7 @@
 #define LCD_CMD_ENTRY_MODE     0b00000110
 #define LCD_CMD_DISPLAY_OFF    0b00001000
 #define LCD_CMD_DISPLAY_ON     0b00001111
-#define LCD_CMD_FUNCTION_SET   0b00101100
+#define LCD_CMD_FUNCTION_SET   0b00101000
 #define LCD_CMD_LINE_2         0b11000000
 
 void coast_lcd_init(){
@@ -67,7 +67,7 @@ void LCD_SendData(uint8_t c){
 }
 
 // for a string
-void LCD_SendStr(char *str){
+void LCD_SendStr(const char *str){
 	while(*str != '\0') {
 		LCD_SendData(*str);
 		str++;

@@ -26,8 +26,11 @@
 #include "coast.h"
 #include "debounce.h"
 #include "pn532.h"
+#include "access_control.h"
+#include "door_control.h"
+#include "management_config.h"
 #include <stdio.h>
-#include <string.h>
+#include "admin_menu.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,6 +56,7 @@ UART_HandleTypeDef huart2;
 /* USER CODE BEGIN PV */
 uint8_t cardUID[10];
 uint8_t cardUIDLength;
+bool cardWasPresent;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,6 +112,9 @@ int main(void)
 		uint8_t msg[] = "PN532 FAILED - check wiring\r\n";
 		HAL_UART_Transmit(&huart2, msg, sizeof(msg) - 1, HAL_MAX_DELAY);
 	}
+	ManagementConfig_Init();
+	AdminMenu_Init();
+	coast_lcd_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -118,16 +125,33 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
-		if (cardUIDLength == sizeof(TAG_UID) &&
-			memcmp(cardUID, TAG_UID, cardUIDLength)) {
-			HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+		if (!cardWasPresent) {
+			AccessRole_t role = AccessControl_IdentifyUID(cardUID, cardUIDLength);
 
+			if (role == ACCESS_ROLE_ADMIN) {
+				ManagementConfig_EnterAdminMode();
+				AdminMenu_Enter();
+        
+				HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_10);
+			} else if (role == ACCESS_ROLE_USER) {
+				Door_RequestAuthorizedEntry();
+				HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_4);
+			} else {
+				Door_ReportUnauthorizedCredential();
+			}
 		}
+		cardWasPresent = true;
+	} else {
+		cardWasPresent = false;
+	}
 
-		if (cardUIDLength == sizeof(TAG_UID) &&
-			memcmp(cardUID, CARD_UID, cardUIDLength)) {
-			HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_4);
-		}
+
+  // start to set
+  // check whether this is the admin mode
+	if (ManagementConfig_IsAdminMode()) {
+    // start to set
+		uint8_t key = scan_keypad();
+		AdminMenu_Update(key);
 	}
   }
   /* USER CODE END 3 */
