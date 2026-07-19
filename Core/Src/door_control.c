@@ -1,25 +1,28 @@
 #include "door_control.h"
 
-#include "main.h"
+#include "door.h"
+#include "signalling.h"
 
-
-// you can replace this part name
 __weak void Door_RequestAuthorizedEntry(void)
 {
-	/* Placeholder until the door/motor module provides an implementation. */
+	Indicator_Signal_Authorised();
+	Door_OpenForEntry();
+	Indicator_Signal_DoorOpen();
 }
 
 __weak void Door_RequestScheduledUnlock(void)
 {
-	/* Placeholder until the door/motor module provides an implementation. */
+	Door_OpenForEntry();
+	Indicator_Signal_DoorOpen();
 }
 
 __weak void Door_RequestClose(void)
 {
-	/* Placeholder until the door/motor module provides an implementation. */
+	Door_Close();
+	Indicator_Signal_DoorClosed();
 }
 
 __weak void Door_ReportUnauthorizedCredential(void)
 {
-	/* Placeholder until the alert module provides an implementation. */
+	Alarm_Trigger_Unauthorised();
 }
