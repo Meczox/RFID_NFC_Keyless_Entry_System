@@ -298,7 +298,7 @@ static void MX_ADC2_Init(void)
   AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
   AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
   AnalogWDGConfig.HighThreshold = 4095;
-  AnalogWDGConfig.LowThreshold = 1000;
+  AnalogWDGConfig.LowThreshold = 800;
   AnalogWDGConfig.Channel = ADC_CHANNEL_5;
   AnalogWDGConfig.ITMode = ENABLE;
   if (HAL_ADC_AnalogWDGConfig(&hadc2, &AnalogWDGConfig) != HAL_OK)
@@ -378,7 +378,7 @@ static void MX_ADC3_Init(void)
   AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
   AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
   AnalogWDGConfig.HighThreshold = 4095;
-  AnalogWDGConfig.LowThreshold = 1000;
+  AnalogWDGConfig.LowThreshold = 800;
   AnalogWDGConfig.Channel = ADC_CHANNEL_1;
   AnalogWDGConfig.ITMode = ENABLE;
   if (HAL_ADC_AnalogWDGConfig(&hadc3, &AnalogWDGConfig) != HAL_OK)
@@ -640,7 +640,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pins : ROW1_Pin ROW2_Pin ROW3_Pin ROW4_Pin */
   GPIO_InitStruct.Pin = ROW1_Pin|ROW2_Pin|ROW3_Pin|ROW4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LCD_CE_Pin */
