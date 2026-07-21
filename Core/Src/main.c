@@ -166,11 +166,15 @@ int main(void)
 				if (ldr1_covered) {
 					Indicator_Signal_Authorised();
 					Door_OpenForEntry();
-					HAL_Delay(2000);
-					Door_Close();
 
+					while (!ldr2_covered) {
+					}
+
+					Door_Close();
 					ldr1_covered = false;
+					ldr2_covered = false;
 					HAL_ADC_Start(&hadc2);
+					HAL_ADC_Start(&hadc3);
 				}
 			} else {
 				Door_ReportUnauthorizedCredential();
@@ -183,13 +187,16 @@ int main(void)
 
 	// for exiting no need to scan card
 	if (ldr2_covered) {
-	        Door_OpenForExit();
-	        HAL_Delay(2000);
-	        Door_OpenForEntry();
+		Door_OpenForExit();
 
-	        ldr2_covered = false;
-			HAL_ADC_Start(&hadc3);
-	    }
+		while (!ldr1_covered) {
+		}
+		Door_Close();
+		ldr2_covered = false;
+		ldr1_covered = false;
+		HAL_ADC_Start(&hadc3);
+		HAL_ADC_Start(&hadc2);
+	}
 
 	if (ManagementConfig_IsAdminMode()) {
 		uint8_t key = scan_keypad();
