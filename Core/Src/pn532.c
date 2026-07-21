@@ -3,14 +3,12 @@
 
 extern I2C_HandleTypeDef hi2c1;
 
-#define PN532_ADDR   0x48   /* the chip's I2C address - always this value, not something we chose */
+#define PN532_ADDR   0x48   // the chip's I2C address
 
 /*
- * Every command sent to the PN532 must be wrapped in this exact byte
- * pattern - this is not our choice, it's how the chip requires commands
- * to be formatted:
+ * PN532 must be wrapped in this exact byte
  *
- *   00 00 FF  LEN  LCS  D4  <your command bytes>  DCS  00
+ *   00 00 FF  LEN  LCS  D4  < command bytes>  DCS  00
  *
  *   LEN = number of bytes from D4 to the end of your command
  *   LCS = a checksum of LEN (so LEN + LCS always adds to 0)
