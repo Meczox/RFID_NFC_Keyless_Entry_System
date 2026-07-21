@@ -36,11 +36,17 @@ static SignallingState_t g_sig;
 static void led_auth_on(void)
 {
     HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, LED_AUTH_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, GPIO_PIN_4, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, GPIO_PIN_5, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, GPIO_PIN_3, GPIO_PIN_SET);
 }
 
 static void led_auth_off(void)
 {
     HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, LED_AUTH_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, GPIO_PIN_4, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, GPIO_PIN_5, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(LED_AUTH_GPIO_Port, GPIO_PIN_3, GPIO_PIN_RESET);
 }
 
 static void alert_leds_on(void)

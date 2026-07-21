@@ -103,8 +103,6 @@ void Error_Handler(void);
 #define LCD_D7_GPIO_Port GPIOC
 #define LCD_CE_Pin GPIO_PIN_2
 #define LCD_CE_GPIO_Port GPIOD
-#define SWO_Pin GPIO_PIN_3
-#define SWO_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

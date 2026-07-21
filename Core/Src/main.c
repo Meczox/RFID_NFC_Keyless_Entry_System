@@ -78,7 +78,9 @@ static void MX_TIM1_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_ADC3_Init(void);
 /* USER CODE BEGIN PFP */
-
+void Handle_NFC_Entry(void);
+void Handle_Exit(void);
+void Handle_Admin_Menu(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -150,60 +152,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
-	// Just sanity Check if it working or not NFC
-
-	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
-		if (!cardWasPresent) {
-			AccessRole_t role = AccessControl_IdentifyUID(cardUID, cardUIDLength);
-
-			if (role == ACCESS_ROLE_ADMIN) {
-				ManagementConfig_EnterAdminMode();
-				AdminMenu_Enter();
-				Indicator_Signal_Admin();
-			} else if (role == ACCESS_ROLE_USER) {
-
-				if (ldr1_covered) {
-					Indicator_Signal_Authorised();
-					Door_OpenForEntry();
-
-					while (!ldr2_covered) {
-					}
-
-					Door_Close();
-					ldr1_covered = false;
-					ldr2_covered = false;
-					HAL_ADC_Start(&hadc2);
-					HAL_ADC_Start(&hadc3);
-				}
-			} else {
-				Door_ReportUnauthorizedCredential();
-			}
-		}
-		cardWasPresent = true;
-	} else {
-		cardWasPresent = false;
-	}
-
-	// for exiting no need to scan card
-	if (ldr2_covered) {
-		Door_OpenForExit();
-
-		while (!ldr1_covered) {
-		}
-		Door_Close();
-		ldr2_covered = false;
-		ldr1_covered = false;
-		HAL_ADC_Start(&hadc3);
-		HAL_ADC_Start(&hadc2);
-	}
-
-	if (ManagementConfig_IsAdminMode()) {
-		uint8_t key = scan_keypad();
-		AdminMenu_Update(key);
-	}
-
-	Signalling_RunTask();
+	  Handle_NFC_Entry();
+	  Handle_Exit();
+	  Handle_Admin_Menu();
+	  Signalling_RunTask();
   }
   /* USER CODE END 3 */
 }
@@ -602,7 +554,8 @@ static void MX_GPIO_Init(void)
                           |LCD_D5_Pin|LCD_D6_Pin|LCD_D7_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2|GPIO_PIN_10|GPIO_PIN_4|GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_2|GPIO_PIN_10|GPIO_PIN_3|GPIO_PIN_4
+                          |GPIO_PIN_5, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LCD_CE_GPIO_Port, LCD_CE_Pin, GPIO_PIN_RESET);
@@ -637,8 +590,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB2 PB10 PB4 PB5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_10|GPIO_PIN_4|GPIO_PIN_5;
+  /*Configure GPIO pins : PB2 PB10 PB3 PB4
+                           PB5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_10|GPIO_PIN_3|GPIO_PIN_4
+                          |GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -676,6 +631,65 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
         ldr2_covered = true;
         HAL_ADC_Stop(&hadc3);
     }
+}
+
+void Handle_NFC_Entry(void) {
+	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
+		if (!cardWasPresent) {
+			AccessRole_t role = AccessControl_IdentifyUID(cardUID, cardUIDLength);
+
+			if (role == ACCESS_ROLE_ADMIN) {
+				ManagementConfig_EnterAdminMode();
+				AdminMenu_Enter();
+				Indicator_Signal_Admin();
+			}
+			else if (role == ACCESS_ROLE_USER) {
+
+				if (ldr1_covered) {
+					Indicator_Signal_Authorised();
+					Door_OpenForEntry();
+
+					while (!ldr2_covered) {}
+
+					Door_Close();
+					Indicator_Signal_DoorClosed();
+					ldr1_covered = false;
+					ldr2_covered = false;
+					HAL_ADC_Start(&hadc2);
+					HAL_ADC_Start(&hadc3);
+				}
+			} else {
+				Door_ReportUnauthorizedCredential();
+			}
+		}
+		cardWasPresent = true;
+	} else {
+		cardWasPresent = false;
+	}
+}
+
+void Handle_Exit(void)
+{
+	// for exiting no need to scan card
+	if (ldr2_covered) {
+		Door_OpenForExit();
+
+		while (!ldr1_covered) {}
+		Door_OpenForEntry();
+		Indicator_Signal_DoorClosed();
+		ldr2_covered = false;
+		ldr1_covered = false;
+		HAL_ADC_Start(&hadc3);
+		HAL_ADC_Start(&hadc2);
+	}
+}
+
+void Handle_Admin_Menu(void)
+{
+	if (ManagementConfig_IsAdminMode()) {
+		uint8_t key = scan_keypad();
+		AdminMenu_Update(key);
+	}
 }
 /* USER CODE END 4 */
 
