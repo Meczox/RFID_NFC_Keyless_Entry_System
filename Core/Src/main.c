@@ -67,6 +67,11 @@ uint8_t cardUIDLength;
 bool cardWasPresent;
 volatile bool ldr1_covered = false; // Flag for ADC3 Watchdog
 volatile bool ldr2_covered = false; // Flag for ADC2 Watchdog
+
+volatile int entry_in_progress = 0;
+volatile int exit_in_progress = 0;
+volatile bool pending_authorized_entry = false;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -131,7 +136,7 @@ int main(void)
 	  uint8_t err_msg[] = "ERROR: NFC Not Connected or Wiring Issue!\r\n";
 	  while (1) {
 		  HAL_UART_Transmit(&huart2, err_msg, sizeof(err_msg) - 1, HAL_MAX_DELAY);
-		  HAL_Delay(1000); // Wait 1 second try again
+		  HAL_Delay(500);
 	  }
   }
 	Door_Init();
@@ -633,6 +638,7 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
     }
 }
 
+volatile bool software_door_open = false;
 void Handle_NFC_Entry(void) {
 	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
 		if (!cardWasPresent) {
@@ -644,20 +650,8 @@ void Handle_NFC_Entry(void) {
 				Indicator_Signal_Admin();
 			}
 			else if (role == ACCESS_ROLE_USER) {
-
-				if (ldr1_covered) {
-					Indicator_Signal_Authorised();
-					Door_OpenForEntry();
-
-					while (!ldr2_covered) {}
-
-					Door_Close();
-					Indicator_Signal_DoorClosed();
-					ldr1_covered = false;
-					ldr2_covered = false;
-					HAL_ADC_Start(&hadc2);
-					HAL_ADC_Start(&hadc3);
-				}
+				Indicator_Signal_Authorised();
+				pending_authorized_entry = true;
 			} else {
 				Door_ReportUnauthorizedCredential();
 			}
@@ -666,21 +660,62 @@ void Handle_NFC_Entry(void) {
 	} else {
 		cardWasPresent = false;
 	}
+
+	// 2. Handle LDR1 - Outside Sensor
+	if (ldr1_covered) {
+
+		if (pending_authorized_entry && exit_in_progress == 0) {
+			// Scanned valid card and stepped into door
+			Door_OpenForEntry();
+			software_door_open = true;
+
+			entry_in_progress = 1;
+			pending_authorized_entry = false;
+		} else if (exit_in_progress > 0) {
+			exit_in_progress = 0;
+		}
+
+		ldr1_covered = false;
+		HAL_ADC_Start(&hadc2);
+	}
 }
 
 void Handle_Exit(void)
 {
-	// for exiting no need to scan card
+	// 1. Handle LDR2 - Inside Sensor
 	if (ldr2_covered) {
-		Door_OpenForExit();
 
-		while (!ldr1_covered) {}
-		Door_OpenForEntry();
-		Indicator_Signal_DoorClosed();
+		if (ldr1_covered) {
+			Alarm_Trigger_Unauthorised();
+		}
+
+		if (entry_in_progress > 0) {
+			entry_in_progress = 0;
+		}
+		else if (exit_in_progress == 0 && entry_in_progress == 0) {
+			Door_OpenForExit();
+			software_door_open = true;
+
+			exit_in_progress = 1;
+		}
+
 		ldr2_covered = false;
-		ldr1_covered = false;
 		HAL_ADC_Start(&hadc3);
-		HAL_ADC_Start(&hadc2);
+	}
+
+	if (software_door_open && entry_in_progress == 0 && exit_in_progress == 0) {
+		Door_Close();
+		software_door_open = false;
+		Indicator_Signal_DoorClosed();
+
+		if (ldr1_covered) {
+			ldr1_covered = false;
+			HAL_ADC_Start(&hadc2);
+		}
+		if (ldr2_covered) {
+			ldr2_covered = false;
+			HAL_ADC_Start(&hadc3);
+		}
 	}
 }
 
