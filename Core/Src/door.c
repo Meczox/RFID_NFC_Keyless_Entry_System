@@ -13,8 +13,8 @@
 #define COIL_D_Pin         GPIO_PIN_2
 
 #define STEP_DELAY_MS      3U
-#define OPEN_STEP_COUNT    120U
-#define CLOSE_STEP_COUNT   120U
+#define OPEN_STEP_COUNT    512U
+#define CLOSE_STEP_COUNT   512U
 
 static DoorState_t g_door_state = DOOR_CLOSED;
 static uint8_t g_phase = 0;

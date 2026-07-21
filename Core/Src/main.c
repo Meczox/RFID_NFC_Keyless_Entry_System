@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include "signalling.h"
 #include "door.h"
-
+#include "ldr.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -52,6 +52,9 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc2;
+ADC_HandleTypeDef hadc3;
+
 I2C_HandleTypeDef hi2c1;
 
 TIM_HandleTypeDef htim1;
@@ -62,6 +65,8 @@ UART_HandleTypeDef huart2;
 uint8_t cardUID[10];
 uint8_t cardUIDLength;
 bool cardWasPresent;
+volatile bool ldr1_covered = false; // Flag for ADC3 Watchdog
+volatile bool ldr2_covered = false; // Flag for ADC2 Watchdog
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -70,6 +75,8 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_ADC2_Init(void);
+static void MX_ADC3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -111,19 +118,29 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   MX_TIM1_Init();
+  MX_ADC2_Init();
+  MX_ADC3_Init();
   /* USER CODE BEGIN 2 */
-	if (PN532_Begin()) {
-		uint8_t msg[] = "PN532 OK\r\n";
-		HAL_UART_Transmit(&huart2, msg, sizeof(msg) - 1, HAL_MAX_DELAY);
-	} else {
-		uint8_t msg[] = "PN532 FAILED - check wiring\r\n";
-		HAL_UART_Transmit(&huart2, msg, sizeof(msg) - 1, HAL_MAX_DELAY);
-	}
+  if (PN532_Begin()) {
+	  uint8_t msg[] = "PN532 Connected Successfully!\r\n";
+	  HAL_UART_Transmit(&huart2, msg, sizeof(msg) - 1, HAL_MAX_DELAY);
+  } else {
+	  // If it fails, trap the code here forever and continuously transmit the error.
+	  uint8_t err_msg[] = "ERROR: NFC Not Connected or Wiring Issue!\r\n";
+	  while (1) {
+		  HAL_UART_Transmit(&huart2, err_msg, sizeof(err_msg) - 1, HAL_MAX_DELAY);
+		  HAL_Delay(1000); // Wait 1 second try again
+	  }
+  }
 	Door_Init();
 	Signalling_Init();
 	ManagementConfig_Init();
 	AdminMenu_Init();
 	coast_lcd_init();
+
+	// WATCHDOG INTERRUPTS
+	HAL_ADC_Start(&hadc2);
+	HAL_ADC_Start(&hadc3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -133,6 +150,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+	// Just sanity Check if it working or not NFC
+
 	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
 		if (!cardWasPresent) {
 			AccessRole_t role = AccessControl_IdentifyUID(cardUID, cardUIDLength);
@@ -142,7 +162,20 @@ int main(void)
 				AdminMenu_Enter();
 				Indicator_Signal_Admin();
 			} else if (role == ACCESS_ROLE_USER) {
-				Door_RequestAuthorizedEntry();
+
+				if (ldr1_covered) {
+					Indicator_Signal_Authorised();
+					Door_OpenForEntry();
+
+					while (!ldr2_covered) {
+					}
+
+					Door_Close();
+					ldr1_covered = false;
+					ldr2_covered = false;
+					HAL_ADC_Start(&hadc2);
+					HAL_ADC_Start(&hadc3);
+				}
 			} else {
 				Door_ReportUnauthorizedCredential();
 			}
@@ -150,6 +183,19 @@ int main(void)
 		cardWasPresent = true;
 	} else {
 		cardWasPresent = false;
+	}
+
+	// for exiting no need to scan card
+	if (ldr2_covered) {
+		Door_OpenForExit();
+
+		while (!ldr1_covered) {
+		}
+		Door_Close();
+		ldr2_covered = false;
+		ldr1_covered = false;
+		HAL_ADC_Start(&hadc3);
+		HAL_ADC_Start(&hadc2);
 	}
 
 	if (ManagementConfig_IsAdminMode()) {
@@ -201,14 +247,168 @@ void SystemClock_Config(void)
     Error_Handler();
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_I2C1
-                              |RCC_PERIPHCLK_TIM1;
+                              |RCC_PERIPHCLK_TIM1|RCC_PERIPHCLK_ADC12
+                              |RCC_PERIPHCLK_ADC34;
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
+  PeriphClkInit.Adc12ClockSelection = RCC_ADC12PLLCLK_DIV1;
+  PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV1;
   PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
   PeriphClkInit.Tim1ClockSelection = RCC_TIM1CLK_HCLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief ADC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC2_Init(void)
+{
+
+  /* USER CODE BEGIN ADC2_Init 0 */
+
+  /* USER CODE END ADC2_Init 0 */
+
+  ADC_AnalogWDGConfTypeDef AnalogWDGConfig = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC2_Init 1 */
+
+  /* USER CODE END ADC2_Init 1 */
+
+  /** Common config
+  */
+  hadc2.Instance = ADC2;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc2.Init.ContinuousConvMode = ENABLE;
+  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.NbrOfConversion = 1;
+  hadc2.Init.DMAContinuousRequests = DISABLE;
+  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc2.Init.LowPowerAutoWait = DISABLE;
+  hadc2.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analog WatchDog 1
+  */
+  AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
+  AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
+  AnalogWDGConfig.HighThreshold = 4095;
+  AnalogWDGConfig.LowThreshold = 800;
+  AnalogWDGConfig.Channel = ADC_CHANNEL_5;
+  AnalogWDGConfig.ITMode = ENABLE;
+  if (HAL_ADC_AnalogWDGConfig(&hadc2, &AnalogWDGConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_5;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC2_Init 2 */
+
+  /* USER CODE END ADC2_Init 2 */
+
+}
+
+/**
+  * @brief ADC3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC3_Init(void)
+{
+
+  /* USER CODE BEGIN ADC3_Init 0 */
+
+  /* USER CODE END ADC3_Init 0 */
+
+  ADC_MultiModeTypeDef multimode = {0};
+  ADC_AnalogWDGConfTypeDef AnalogWDGConfig = {0};
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC3_Init 1 */
+
+  /* USER CODE END ADC3_Init 1 */
+
+  /** Common config
+  */
+  hadc3.Instance = ADC3;
+  hadc3.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  hadc3.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc3.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc3.Init.ContinuousConvMode = ENABLE;
+  hadc3.Init.DiscontinuousConvMode = DISABLE;
+  hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc3.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc3.Init.NbrOfConversion = 1;
+  hadc3.Init.DMAContinuousRequests = DISABLE;
+  hadc3.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc3.Init.LowPowerAutoWait = DISABLE;
+  hadc3.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
+  if (HAL_ADC_Init(&hadc3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure the ADC multi-mode
+  */
+  multimode.Mode = ADC_MODE_INDEPENDENT;
+  if (HAL_ADCEx_MultiModeConfigChannel(&hadc3, &multimode) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analog WatchDog 1
+  */
+  AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
+  AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
+  AnalogWDGConfig.HighThreshold = 4095;
+  AnalogWDGConfig.LowThreshold = 800;
+  AnalogWDGConfig.Channel = ADC_CHANNEL_1;
+  AnalogWDGConfig.ITMode = ENABLE;
+  if (HAL_ADC_AnalogWDGConfig(&hadc3, &AnalogWDGConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc3, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC3_Init 2 */
+
+  /* USER CODE END ADC3_Init 2 */
+
 }
 
 /**
@@ -447,7 +647,7 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pins : ROW1_Pin ROW2_Pin ROW3_Pin ROW4_Pin */
   GPIO_InitStruct.Pin = ROW1_Pin|ROW2_Pin|ROW3_Pin|ROW4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LCD_CE_Pin */
@@ -463,7 +663,20 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
+{
+    // LDR 2 trigger (Exit)
+    if (hadc->Instance == ADC2) {
+        ldr1_covered = true;
+        HAL_ADC_Stop(&hadc2);
+    }
 
+    // LDR 1 trigger (Entry)
+    if (hadc->Instance == ADC3) {
+        ldr2_covered = true;
+        HAL_ADC_Stop(&hadc3);
+    }
+}
 /* USER CODE END 4 */
 
 /**
