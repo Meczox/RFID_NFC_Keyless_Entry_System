@@ -262,7 +262,7 @@ static void MX_ADC2_Init(void)
   AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
   AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
   AnalogWDGConfig.HighThreshold = 4095;
-  AnalogWDGConfig.LowThreshold = 800;
+  AnalogWDGConfig.LowThreshold = 400;
   AnalogWDGConfig.Channel = ADC_CHANNEL_5;
   AnalogWDGConfig.ITMode = ENABLE;
   if (HAL_ADC_AnalogWDGConfig(&hadc2, &AnalogWDGConfig) != HAL_OK)
@@ -342,7 +342,7 @@ static void MX_ADC3_Init(void)
   AnalogWDGConfig.WatchdogNumber = ADC_ANALOGWATCHDOG_1;
   AnalogWDGConfig.WatchdogMode = ADC_ANALOGWATCHDOG_SINGLE_REG;
   AnalogWDGConfig.HighThreshold = 4095;
-  AnalogWDGConfig.LowThreshold = 800;
+  AnalogWDGConfig.LowThreshold = 400;
   AnalogWDGConfig.Channel = ADC_CHANNEL_1;
   AnalogWDGConfig.ITMode = ENABLE;
   if (HAL_ADC_AnalogWDGConfig(&hadc3, &AnalogWDGConfig) != HAL_OK)
@@ -704,7 +704,7 @@ void Handle_Exit(void)
 	}
 
 	if (software_door_open && entry_in_progress == 0 && exit_in_progress == 0) {
-		Door_Close();
+		Door_OpenForEntry();
 		software_door_open = false;
 		Indicator_Signal_DoorClosed();
 
