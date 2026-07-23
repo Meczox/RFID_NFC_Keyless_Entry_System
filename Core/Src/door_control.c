@@ -26,3 +26,15 @@ __weak void Door_ReportUnauthorizedCredential(void)
 {
 	Alarm_Trigger_Unauthorised();
 }
+
+__weak bool Door_ToggleAdministrativeOverride(void)
+{
+	if (Door_IsOpen()) {
+		Door_RequestClose();
+		return false;
+	}
+
+	Indicator_Signal_Authorised();
+	Door_RequestScheduledUnlock();
+	return true;
+}
