@@ -2,7 +2,7 @@
 
 #include "door.h"
 #include "signalling.h"
-
+static bool adminOverrideActive = false;
 __weak void Door_RequestAuthorizedEntry(void)
 {
 	Indicator_Signal_Authorised();
@@ -27,14 +27,30 @@ __weak void Door_ReportUnauthorizedCredential(void)
 	Alarm_Trigger_Unauthorised();
 }
 
-__weak bool Door_ToggleAdministrativeOverride(void)
+__weak bool Door_CanCloseAdministrativeOverride(void)
 {
-	if (Door_IsOpen()) {
-		Door_RequestClose();
-		return false;
+	return true;
+}
+
+bool Door_IsAdministrativeOverrideActive(void)
+{
+	return adminOverrideActive;
+}
+
+__weak DoorAdminOverrideResult_t Door_ToggleAdministrativeOverride(void)
+{
+	if (!adminOverrideActive) {
+		Indicator_Signal_Authorised();
+		Door_RequestScheduledUnlock();
+		adminOverrideActive = true;
+		return DOOR_ADMIN_OVERRIDE_OPENED;
 	}
 
-	Indicator_Signal_Authorised();
-	Door_RequestScheduledUnlock();
-	return true;
+	if (!Door_CanCloseAdministrativeOverride()) {
+		return DOOR_ADMIN_OVERRIDE_BUSY;
+	}
+
+	Door_RequestClose();
+	adminOverrideActive = false;
+	return DOOR_ADMIN_OVERRIDE_CLOSED;
 }

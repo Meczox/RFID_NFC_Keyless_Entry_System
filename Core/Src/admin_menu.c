@@ -116,21 +116,30 @@ static void handle_main_menu(uint8_t key)
         break;
 
     case 'D':
-        ManagementConfig_ExitAdminMode();
-        menuState = ADMIN_MENU_INACTIVE;
+        if (Door_IsAdministrativeOverrideActive() && Door_IsOpen()) {
+                show_feedback("CLOSE DOOR FIRST");
+                break;
+            }
 
-        LCD_SendCmd(LCD_CLEAR_DISPLAY);
-        LCD_SendStr("ADMIN EXIT");
-        break;
+            ManagementConfig_ExitAdminMode();
+            menuState = ADMIN_MENU_INACTIVE;
 
-    case '#':
-        if (Door_ToggleAdministrativeOverride()) {
-            show_feedback("OVERRIDE OPEN");
-        } else {
-            show_feedback("DOOR CLOSED");
-        }
-        break;
+            LCD_SendCmd(LCD_CLEAR_DISPLAY);
+            LCD_SendStr("ADMIN EXIT");
+            break;
+    case '#': {
+        DoorAdminOverrideResult_t result = Door_ToggleAdministrativeOverride();
 
+            if (result == DOOR_ADMIN_OVERRIDE_OPENED) {
+                show_feedback("OVERRIDE OPEN");
+            } else if (result == DOOR_ADMIN_OVERRIDE_CLOSED) {
+                show_feedback("DOOR CLOSED");
+            } else {
+                show_feedback("DOOR BUSY");
+            }
+            break;
+        
+    }        
     default:
         break;
     }

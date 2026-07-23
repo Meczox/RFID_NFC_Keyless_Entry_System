@@ -641,6 +641,15 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+bool Door_CanCloseAdministrativeOverride(void)
+{
+	return (entry_in_progress == 0)
+		&& (exit_in_progress == 0)
+		&& !ldr1_covered
+		&& !ldr2_covered;
+}
+
+
 void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 {
     // LDR 2 trigger (Exit)
