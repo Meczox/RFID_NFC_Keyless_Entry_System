@@ -34,6 +34,8 @@
 #include "signalling.h"
 #include "door.h"
 #include "ldr.h"
+#include "clock.h"
+#include "schedule.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -144,6 +146,19 @@ int main(void)
 	ManagementConfig_Init();
 	AdminMenu_Init();
 	coast_lcd_init();
+	Schedule_Init();
+	if (Clock_Init()) {
+		ClockTime_t now;
+		char rtcMessage[24];
+		if (Clock_GetTime(&now)) {
+			int length = snprintf(rtcMessage, sizeof(rtcMessage),
+					"RTC %02u:%02u:%02u\r\n", now.hour, now.minute, now.second);
+			HAL_UART_Transmit(&huart2, (uint8_t *)rtcMessage, (uint16_t)length, HAL_MAX_DELAY);
+		}
+	} else {
+		uint8_t rtcError[] = "ERROR: RTC initialization failed!\r\n";
+		HAL_UART_Transmit(&huart2, rtcError, sizeof(rtcError) - 1U, HAL_MAX_DELAY);
+	}
 
 	// WATCHDOG INTERRUPTS
 	HAL_ADC_Start(&hadc2);
@@ -160,6 +175,7 @@ int main(void)
 	  Handle_NFC_Entry();
 	  Handle_Exit();
 	  Handle_Admin_Menu();
+	  Schedule_Update();
 	  Signalling_RunTask();
   }
   /* USER CODE END 3 */
@@ -178,9 +194,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
   RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
@@ -205,12 +222,13 @@ void SystemClock_Config(void)
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_USART2|RCC_PERIPHCLK_I2C1
                               |RCC_PERIPHCLK_TIM1|RCC_PERIPHCLK_ADC12
-                              |RCC_PERIPHCLK_ADC34;
+                              |RCC_PERIPHCLK_ADC34|RCC_PERIPHCLK_RTC;
   PeriphClkInit.Usart2ClockSelection = RCC_USART2CLKSOURCE_PCLK1;
   PeriphClkInit.Adc12ClockSelection = RCC_ADC12PLLCLK_DIV1;
   PeriphClkInit.Adc34ClockSelection = RCC_ADC34PLLCLK_DIV1;
   PeriphClkInit.I2c1ClockSelection = RCC_I2C1CLKSOURCE_HSI;
   PeriphClkInit.Tim1ClockSelection = RCC_TIM1CLK_HCLK;
+  PeriphClkInit.RTCClockSelection = RCC_RTCCLKSOURCE_LSI;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
