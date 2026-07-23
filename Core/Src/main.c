@@ -673,6 +673,10 @@ void Handle_NFC_Entry(void) {
 			pending_authorized_entry = false;
 		} else if (exit_in_progress > 0) {
 			exit_in_progress = 0;
+
+			Door_OpenForEntry();
+			software_door_open = false;
+			Indicator_Signal_DoorClosed();
 		}
 
 		ldr1_covered = false;
@@ -683,14 +687,16 @@ void Handle_NFC_Entry(void) {
 void Handle_Exit(void)
 {
 	// 1. Handle LDR2 - Inside Sensor
-	if (ldr2_covered) {
-
-		if (ldr1_covered) {
-			Alarm_Trigger_Unauthorised();
-		}
+	if (ldr1_covered && ldr2_covered) {
+		Alarm_Trigger_Unauthorised();
+	} else if (ldr2_covered) {
 
 		if (entry_in_progress > 0) {
 			entry_in_progress = 0;
+
+			Door_Close();
+			software_door_open = false;
+			Indicator_Signal_DoorClosed();
 		}
 		else if (exit_in_progress == 0 && entry_in_progress == 0) {
 			Door_OpenForExit();
@@ -703,20 +709,7 @@ void Handle_Exit(void)
 		HAL_ADC_Start(&hadc3);
 	}
 
-	if (software_door_open && entry_in_progress == 0 && exit_in_progress == 0) {
-		Door_OpenForEntry();
-		software_door_open = false;
-		Indicator_Signal_DoorClosed();
 
-		if (ldr1_covered) {
-			ldr1_covered = false;
-			HAL_ADC_Start(&hadc2);
-		}
-		if (ldr2_covered) {
-			ldr2_covered = false;
-			HAL_ADC_Start(&hadc3);
-		}
-	}
 }
 
 void Handle_Admin_Menu(void)
