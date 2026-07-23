@@ -41,7 +41,9 @@ __weak DoorAdminOverrideResult_t Door_ToggleAdministrativeOverride(void)
 {
 	if (!adminOverrideActive) {
 		Indicator_Signal_Authorised();
-		Door_RequestScheduledUnlock();
+		if (!Door_IsOpen()) {
+			Door_RequestScheduledUnlock();
+		}
 		adminOverrideActive = true;
 		return DOOR_ADMIN_OVERRIDE_OPENED;
 	}
