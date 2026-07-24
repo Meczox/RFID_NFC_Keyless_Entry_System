@@ -41,10 +41,18 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+typedef enum {
+	OVERRIDE_TRANSIT_NONE = 0,
+	OVERRIDE_TRANSIT_FROM_OUTSIDE,
+	OVERRIDE_TRANSIT_FROM_INSIDE
+} OverrideTransitDirection_t;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
+#define LDR_COVERED_THRESHOLD 400U
 
 /* USER CODE END PD */
 
@@ -73,6 +81,10 @@ volatile bool ldr2_covered = false; // Flag for ADC2 Watchdog
 volatile int entry_in_progress = 0;
 volatile int exit_in_progress = 0;
 volatile bool pending_authorized_entry = false;
+static OverrideTransitDirection_t overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+static bool overrideLdr1Latched = false;
+static bool overrideLdr2Latched = false;
+static uint32_t lastRtcPrintAt = 0U;
 
 /* USER CODE END PV */
 
@@ -172,6 +184,21 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  if ((HAL_GetTick() - lastRtcPrintAt) >= 1000U) {
+		char rtcMessage[24];
+		ClockTime_t now;
+
+		lastRtcPrintAt = HAL_GetTick();
+		if (Clock_GetTime(&now)) {
+			int length = snprintf(rtcMessage, sizeof(rtcMessage),
+					"RTC %02u:%02u:%02u\r\n",
+					(unsigned int)now.hour,
+					(unsigned int)now.minute,
+					(unsigned int)now.second);
+			HAL_UART_Transmit(&huart2, (uint8_t *)rtcMessage, (uint16_t)length, HAL_MAX_DELAY);
+		}
+	  }
+
 	  Handle_NFC_Entry();
 	  Handle_Exit();
 	  Handle_Admin_Menu();
@@ -641,6 +668,18 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+bool Door_CanCloseAdministrativeOverride(void)
+{
+	return (entry_in_progress == 0)
+		&& (exit_in_progress == 0)
+		&& (overrideTransitDirection == OVERRIDE_TRANSIT_NONE)
+		&& !overrideLdr1Latched
+		&& !overrideLdr2Latched
+		&& !ldr1_covered
+		&& !ldr2_covered;
+}
+
+
 void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 {
     // LDR 2 trigger (Exit)
@@ -658,6 +697,21 @@ void HAL_ADC_LevelOutOfWindowCallback(ADC_HandleTypeDef* hadc)
 
 volatile bool software_door_open = false;
 void Handle_NFC_Entry(void) {
+	bool overrideActive = Door_IsAdministrativeOverrideActive();
+
+	if (!overrideActive) {
+		overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+		overrideLdr1Latched = false;
+		overrideLdr2Latched = false;
+	} else {
+		if (!ldr1_covered && HAL_ADC_GetValue(&hadc2) >= LDR_COVERED_THRESHOLD) {
+			overrideLdr1Latched = false;
+		}
+		if (!ldr2_covered && HAL_ADC_GetValue(&hadc3) >= LDR_COVERED_THRESHOLD) {
+			overrideLdr2Latched = false;
+		}
+	}
+
 	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
 		if (!cardWasPresent) {
 			AccessRole_t role = AccessControl_IdentifyUID(cardUID, cardUIDLength);
@@ -669,7 +723,9 @@ void Handle_NFC_Entry(void) {
 			}
 			else if (role == ACCESS_ROLE_USER) {
 				Indicator_Signal_Authorised();
-				pending_authorized_entry = true;
+				if (!overrideActive) {
+					pending_authorized_entry = true;
+				}
 			} else {
 				Door_ReportUnauthorizedCredential();
 			}
@@ -679,10 +735,30 @@ void Handle_NFC_Entry(void) {
 		cardWasPresent = false;
 	}
 
+	if (overrideActive) {
+		pending_authorized_entry = false;
+	}
+
 	// 2. Handle LDR1 - Outside Sensor
 	if (ldr1_covered) {
 
-		if (pending_authorized_entry && exit_in_progress == 0) {
+		if (overrideActive) {
+			if (!overrideLdr1Latched) {
+				overrideLdr1Latched = true;
+				if (exit_in_progress > 0) {
+					exit_in_progress = 0;
+					overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+				} else if (overrideTransitDirection == OVERRIDE_TRANSIT_FROM_INSIDE) {
+					/* Completed an inside-to-outside transit. */
+					overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+				} else if (overrideTransitDirection == OVERRIDE_TRANSIT_FROM_OUTSIDE) {
+					/* Triggered LDR1 again after release: person retreated. */
+					overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+				} else if (overrideTransitDirection == OVERRIDE_TRANSIT_NONE) {
+					overrideTransitDirection = OVERRIDE_TRANSIT_FROM_OUTSIDE;
+				}
+			}
+		} else if (pending_authorized_entry && exit_in_progress == 0) {
 			// Scanned valid card and stepped into door
 			Door_OpenForEntry();
 			software_door_open = true;
@@ -704,12 +780,30 @@ void Handle_NFC_Entry(void) {
 
 void Handle_Exit(void)
 {
+	bool overrideActive = Door_IsAdministrativeOverrideActive();
+
 	// 1. Handle LDR2 - Inside Sensor
-	if (ldr1_covered && ldr2_covered) {
+	if (!overrideActive && ldr1_covered && ldr2_covered) {
 		Alarm_Trigger_Unauthorised();
 	} else if (ldr2_covered) {
 
-		if (entry_in_progress > 0) {
+		if (overrideActive) {
+			if (!overrideLdr2Latched) {
+				overrideLdr2Latched = true;
+				if (entry_in_progress > 0) {
+					entry_in_progress = 0;
+					overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+				} else if (overrideTransitDirection == OVERRIDE_TRANSIT_FROM_OUTSIDE) {
+					/* Completed an outside-to-inside transit. */
+					overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+				} else if (overrideTransitDirection == OVERRIDE_TRANSIT_FROM_INSIDE) {
+					/* Triggered LDR2 again after release: person retreated. */
+					overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
+				} else if (overrideTransitDirection == OVERRIDE_TRANSIT_NONE) {
+					overrideTransitDirection = OVERRIDE_TRANSIT_FROM_INSIDE;
+				}
+			}
+		} else if (entry_in_progress > 0) {
 			entry_in_progress = 0;
 
 			Door_Close();

@@ -27,6 +27,12 @@ void Schedule_Update(void)
 	const ManagementConfig_t *config = ManagementConfig_Get();
 	bool configuredMinute;
 
+	if (Door_IsAdministrativeOverrideActive()) {
+		scheduledUnlockActive = false;
+		triggeredForCurrentMinute = true;
+		return;
+	}
+
 	if (scheduledUnlockActive) {
 		uint32_t durationMs = (uint32_t)config->unlockDurationSeconds * 1000U;
 		if ((HAL_GetTick() - unlockStartedAt) >= durationMs) {

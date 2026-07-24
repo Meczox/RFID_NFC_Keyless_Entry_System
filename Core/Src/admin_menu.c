@@ -1,5 +1,6 @@
 #include "admin_menu.h"
 
+#include "door_control.h"
 #include "lcd.h"
 #include "main.h"
 #include "management_config.h"
@@ -40,7 +41,7 @@ static void show_main_menu(void)
     LCD_SendStr("A:TIME B:DUR");
 
     LCD_SendCmd(LCD_SECOND_LINE);
-    LCD_SendStr("C:VIEW D:EXIT");
+    LCD_SendStr("C:CFG D:X #:DOOR");
 }
 
 static void show_time_input(void)
@@ -115,13 +116,30 @@ static void handle_main_menu(uint8_t key)
         break;
 
     case 'D':
+        if (Door_IsAdministrativeOverrideActive()) {
+            show_feedback("CLOSE DOOR FIRST");
+            break;
+        }
+
         ManagementConfig_ExitAdminMode();
         menuState = ADMIN_MENU_INACTIVE;
 
         LCD_SendCmd(LCD_CLEAR_DISPLAY);
         LCD_SendStr("ADMIN EXIT");
         break;
+    case '#': {
+        DoorAdminOverrideResult_t result = Door_ToggleAdministrativeOverride();
 
+            if (result == DOOR_ADMIN_OVERRIDE_OPENED) {
+                show_feedback("OVERRIDE OPEN");
+            } else if (result == DOOR_ADMIN_OVERRIDE_CLOSED) {
+                show_feedback("DOOR CLOSED");
+            } else {
+                show_feedback("DOOR BUSY");
+            }
+            break;
+
+    }
     default:
         break;
     }
