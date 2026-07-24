@@ -84,6 +84,7 @@ volatile bool pending_authorized_entry = false;
 static OverrideTransitDirection_t overrideTransitDirection = OVERRIDE_TRANSIT_NONE;
 static bool overrideLdr1Latched = false;
 static bool overrideLdr2Latched = false;
+static uint32_t lastRtcPrintAt = 0U;
 
 /* USER CODE END PV */
 
@@ -183,6 +184,21 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  if ((HAL_GetTick() - lastRtcPrintAt) >= 1000U) {
+		char rtcMessage[24];
+		ClockTime_t now;
+
+		lastRtcPrintAt = HAL_GetTick();
+		if (Clock_GetTime(&now)) {
+			int length = snprintf(rtcMessage, sizeof(rtcMessage),
+					"RTC %02u:%02u:%02u\r\n",
+					(unsigned int)now.hour,
+					(unsigned int)now.minute,
+					(unsigned int)now.second);
+			HAL_UART_Transmit(&huart2, (uint8_t *)rtcMessage, (uint16_t)length, HAL_MAX_DELAY);
+		}
+	  }
+
 	  Handle_NFC_Entry();
 	  Handle_Exit();
 	  Handle_Admin_Menu();
