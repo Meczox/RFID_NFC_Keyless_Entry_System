@@ -64,21 +64,17 @@ static bool PN532_WaitAndRead(uint8_t *out, uint8_t len, uint32_t timeoutMs)
 bool PN532_Begin(void)
 {
     uint8_t ack[6];
-    uint8_t resp[10];
 
-    /* Command 0x02 = "GetFirmwareVersion" - just checks the chip is alive and talking. */
-    uint8_t getVersion[] = { 0x02 };
-    PN532_SendCommand(getVersion, sizeof(getVersion));
-    if (!PN532_WaitAndRead(ack, 6, 100))  return false; /* the chip's "got it" reply */
-    if (!PN532_WaitAndRead(resp, 10, 100)) return false; /* the actual version data */
+    uint8_t samConfig[] = { 0x14, 0x01, 0x14, 0x00 };
 
-    /* Command 0x14 = "SAMConfiguration" - must be sent once to put the chip
-     * into normal card-scanning mode. */
-    uint8_t samConfig[] = { 0x14, 0x01, 0x14, 0x01 };
-    PN532_SendCommand(samConfig, sizeof(samConfig));
+    if (!PN532_SendCommand(samConfig, sizeof(samConfig))) {
+        return false;
+    }
+
+    // Clear out the ACK reply
     PN532_WaitAndRead(ack, 6, 100);
-    PN532_WaitAndRead(resp, 3, 100);
 
+    HAL_Delay(50);
     return true;
 }
 
