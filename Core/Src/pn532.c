@@ -6,7 +6,6 @@ extern I2C_HandleTypeDef hi2c1;
 #define PN532_ADDR   0x48   // the chip's I2C address
 
 /*
- * PN532 must be wrapped in this exact byte
  *
  *   00 00 FF  LEN  LCS  D4  < command bytes>  DCS  00
  *
@@ -39,10 +38,8 @@ static bool PN532_SendCommand(uint8_t *cmd, uint8_t cmdLen)
 }
 
 /*
- * Every time we read from the PN532 over I2C, the very first byte back is
- * always a "ready?" flag (0x01 = yes, data follows / 0x00 = not yet) - this
- * happens on every single read, so we keep retrying until we see 0x01 or
- * time out.
+ * just try to read back from the carrd but len + 1 cus of status bit at the front
+ *
  */
 static bool PN532_WaitAndRead(uint8_t *out, uint8_t len, uint32_t timeoutMs)
 {
@@ -83,7 +80,9 @@ bool PN532_ScanUID(uint8_t *uid, uint8_t *len)
     uint8_t ack[6];
     uint8_t resp[24];
 
+    // command to make it scan for card
     uint8_t scan[] = { 0x4A, 0x01, 0x00 };
+
     PN532_SendCommand(scan, sizeof(scan));
 
     if (!PN532_WaitAndRead(ack, 6, 100))   return false;
