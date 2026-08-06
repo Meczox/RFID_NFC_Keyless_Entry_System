@@ -27,7 +27,7 @@ __weak void Door_ReportUnauthorizedCredential(void)
 	Alarm_Trigger_Unauthorised();
 }
 
-__weak bool Door_CanCloseAdministrativeOverride(void)
+__weak bool Door_IsDoorwayClear(void)
 {
 	return true;
 }
@@ -48,7 +48,7 @@ __weak DoorAdminOverrideResult_t Door_ToggleAdministrativeOverride(void)
 		return DOOR_ADMIN_OVERRIDE_OPENED;
 	}
 
-	if (!Door_CanCloseAdministrativeOverride()) {
+	if (!Door_IsDoorwayClear()) {
 		return DOOR_ADMIN_OVERRIDE_BUSY;
 	}
 

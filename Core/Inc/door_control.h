@@ -20,6 +20,6 @@ void Door_ReportUnauthorizedCredential(void);
 
 DoorAdminOverrideResult_t Door_ToggleAdministrativeOverride(void);
 bool Door_IsAdministrativeOverrideActive(void);
-bool Door_CanCloseAdministrativeOverride(void);
+bool Door_IsDoorwayClear(void);
 
 #endif /* INC_DOOR_CONTROL_H_ */

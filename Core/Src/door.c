@@ -16,7 +16,14 @@
 #define OPEN_STEP_COUNT    512U
 #define CLOSE_STEP_COUNT   512U
 
+typedef enum {
+    OPENED_NONE = 0,
+    OPENED_FOR_ENTRY,
+    OPENED_FOR_EXIT
+} DoorOpenDirection_t;
+
 static DoorState_t g_door_state = DOOR_CLOSED;
+static DoorOpenDirection_t g_opened_direction = OPENED_NONE;
 static uint8_t g_phase = 0;
 
 static void motor_all_off(void)
@@ -67,11 +74,16 @@ void Door_Init(void)
 {
     motor_all_off();
     g_door_state = DOOR_CLOSED;
+    g_opened_direction = OPENED_NONE;
     g_phase = 0;
 }
 
 void Door_OpenForEntry(void)
-{
+{   
+    if (g_door_state == DOOR_OPEN) {
+        return;
+    }
+
     g_door_state = DOOR_MOVING_ENTRY;
 
     for (uint16_t i = 0; i < OPEN_STEP_COUNT; i++) {
@@ -81,10 +93,16 @@ void Door_OpenForEntry(void)
 
     motor_all_off();
     g_door_state = DOOR_OPEN;
+
+    g_opened_direction = OPENED_FOR_ENTRY;
 }
 
 void Door_OpenForExit(void)
-{
+{   
+    if (g_door_state == DOOR_OPEN) {
+        return;
+    }
+
     g_door_state = DOOR_MOVING_EXIT;
 
     for (uint16_t i = 0; i < OPEN_STEP_COUNT; i++) {
@@ -94,6 +112,8 @@ void Door_OpenForExit(void)
 
     motor_all_off();
     g_door_state = DOOR_OPEN;
+
+    g_opened_direction = OPENED_FOR_EXIT;
 }
 
 void Door_Close(void)
@@ -103,12 +123,17 @@ void Door_Close(void)
     }
 
     for (uint16_t i = 0; i < CLOSE_STEP_COUNT; i++) {
-        motor_step_reverse();
+        if (g_opened_direction == OPENED_FOR_EXIT) {
+            motor_step_forward();
+        } else {
+            motor_step_reverse();
+        }
         HAL_Delay(STEP_DELAY_MS);
     }
 
     motor_all_off();
     g_door_state = DOOR_CLOSED;
+    g_opened_direction = OPENED_NONE;
 }
 
 DoorState_t Door_GetState(void)
