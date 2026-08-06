@@ -714,6 +714,17 @@ void Handle_NFC_Entry(void) {
 
 	if (PN532_ScanUID(cardUID, &cardUIDLength)) {
 		if (!cardWasPresent) {
+
+			/* TODO REMOVE LATER JUST FOR DEBUGGING */
+			char uidStr[40];
+			int pos = snprintf(uidStr, sizeof(uidStr), "UID: ");
+			for (uint8_t i = 0; i < cardUIDLength; i++) {
+				pos += snprintf(&uidStr[pos], sizeof(uidStr) - pos, "%02X", cardUID[i]);
+			}
+			pos += snprintf(&uidStr[pos], sizeof(uidStr) - pos, "\r\n");
+			HAL_UART_Transmit(&huart2, (uint8_t *)uidStr, pos, HAL_MAX_DELAY);
+			/* REMOVE LATER  */
+
 			AccessRole_t role = AccessControl_IdentifyUID(cardUID, cardUIDLength);
 
 			if (role == ACCESS_ROLE_ADMIN) {
