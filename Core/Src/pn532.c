@@ -86,7 +86,7 @@ bool PN532_ScanUID(uint8_t *uid, uint8_t *len)
     PN532_SendCommand(scan, sizeof(scan));
 
     if (!PN532_WaitAndRead(ack, 6, 100))   return false;
-    if (!PN532_WaitAndRead(resp, 24, 200)) return false;
+    if (!PN532_WaitAndRead(resp, 24, 100)) return false;
 
 
     if (resp[7] == 0) {

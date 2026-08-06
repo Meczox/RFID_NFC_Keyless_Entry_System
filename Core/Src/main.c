@@ -85,6 +85,7 @@ static OverrideTransitDirection_t overrideTransitDirection = OVERRIDE_TRANSIT_NO
 static bool overrideLdr1Latched = false;
 static bool overrideLdr2Latched = false;
 static uint32_t lastRtcPrintAt = 0U;
+volatile bool unauthorised_sequence = false;
 
 /* USER CODE END PV */
 
@@ -204,6 +205,7 @@ int main(void)
 	  Handle_Admin_Menu();
 	  Schedule_Update();
 	  Signalling_RunTask();
+
   }
   /* USER CODE END 3 */
 }
@@ -776,7 +778,11 @@ void Handle_NFC_Entry(void) {
 
 			entry_in_progress = 1;
 			pending_authorized_entry = false;
-		} else if (exit_in_progress > 0) {
+			unauthorised_sequence = false;
+		} else if (!pending_authorized_entry && exit_in_progress == 0) {
+		    unauthorised_sequence = true;
+		}
+		else if (exit_in_progress > 0) {
 			exit_in_progress = 0;
 
 			Door_OpenForEntry();
@@ -794,8 +800,9 @@ void Handle_Exit(void)
 	bool overrideActive = Door_IsAdministrativeOverrideActive();
 
 	// 1. Handle LDR2 - Inside Sensor
-	if (!overrideActive && ldr1_covered && ldr2_covered) {
-		Alarm_Trigger_Unauthorised();
+	if (!overrideActive && unauthorised_sequence && ldr2_covered) {
+	    Alarm_Trigger_Unauthorised();
+	    unauthorised_sequence = false;
 	} else if (ldr2_covered) {
 
 		if (overrideActive) {
