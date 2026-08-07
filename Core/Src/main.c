@@ -670,7 +670,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-bool Door_CanCloseAdministrativeOverride(void)
+bool Door_IsDoorwayClear(void)
 {
 	return (entry_in_progress == 0)
 		&& (exit_in_progress == 0)
@@ -785,7 +785,7 @@ void Handle_NFC_Entry(void) {
 		else if (exit_in_progress > 0) {
 			exit_in_progress = 0;
 
-			Door_OpenForEntry();
+			Door_Close();
 			software_door_open = false;
 			Indicator_Signal_DoorClosed();
 		}
