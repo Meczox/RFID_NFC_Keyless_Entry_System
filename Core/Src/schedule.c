@@ -65,7 +65,7 @@ void Schedule_Update(void)
 		}
 
 		if (dateRelation > 0) {
-			if (scheduledUnlockActive) {
+			if (scheduledUnlockActive && Door_IsDoorwayClear()) {
 				Door_RequestClose();
 				scheduledUnlockActive = false;
 			}
@@ -88,7 +88,8 @@ void Schedule_Update(void)
 		if (scheduledUnlockActive) {
 			uint32_t durationMs =
 					(uint32_t)config->specificDateDurationSeconds * 1000U;
-			if ((HAL_GetTick() - unlockStartedAt) >= durationMs) {
+			if ((HAL_GetTick() - unlockStartedAt) >= durationMs
+					&& Door_IsDoorwayClear()) {
 				Door_RequestClose();
 				scheduledUnlockActive = false;
 			}
@@ -103,7 +104,8 @@ void Schedule_Update(void)
 
 	if (scheduledUnlockActive) {
 		uint32_t durationMs = (uint32_t)config->unlockDurationSeconds * 1000U;
-		if ((HAL_GetTick() - unlockStartedAt) >= durationMs) {
+		if ((HAL_GetTick() - unlockStartedAt) >= durationMs
+				&& Door_IsDoorwayClear()) {
 			Door_RequestClose();
 			scheduledUnlockActive = false;
 		}
