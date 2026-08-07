@@ -4,12 +4,12 @@
 #include <string.h>
 
 // CARD SET ORIGINAL
-//static const uint8_t ADMIN_TAG_UID[] = {0x81, 0xE5, 0x1C, 0x07};
-//static const uint8_t USER_CARD_UID[] = {0xBB, 0x74, 0x0B, 0x07};
+static const uint8_t ADMIN_TAG_UID[] = {0x81, 0xE5, 0x1C, 0x07};
+static const uint8_t USER_CARD_UID[] = {0xBB, 0x74, 0x0B, 0x07};
 
 // SECOND CARD SET
-static const uint8_t ADMIN_TAG_UID[] = {0xC1, 0x17, 0x1D, 0x07};
-static const uint8_t USER_CARD_UID[] = {0x6D, 0xC6, 0x0A, 0x07};
+//static const uint8_t ADMIN_TAG_UID[] = {0xC1, 0x17, 0x1D, 0x07};
+//static const uint8_t USER_CARD_UID[] = {0x6D, 0xC6, 0x0A, 0x07};
 
 static int uid_matches(const uint8_t *uid, uint8_t uidLength,
 		const uint8_t *expected, size_t expectedLength)

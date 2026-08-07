@@ -19,6 +19,44 @@ static uint8_t from_bcd(uint32_t value)
 	return (uint8_t)(((value >> 4U) * 10U) + (value & 0x0FU));
 }
 
+static uint8_t month_from_build_date(void)
+{
+	if (__DATE__[0] == 'J' && __DATE__[1] == 'a') {
+		return 1U;
+	}
+	if (__DATE__[0] == 'F') {
+		return 2U;
+	}
+	if (__DATE__[0] == 'M' && __DATE__[2] == 'r') {
+		return 3U;
+	}
+	if (__DATE__[0] == 'A' && __DATE__[1] == 'p') {
+		return 4U;
+	}
+	if (__DATE__[0] == 'M' && __DATE__[2] == 'y') {
+		return 5U;
+	}
+	if (__DATE__[0] == 'J' && __DATE__[2] == 'n') {
+		return 6U;
+	}
+	if (__DATE__[0] == 'J' && __DATE__[2] == 'l') {
+		return 7U;
+	}
+	if (__DATE__[0] == 'A' && __DATE__[1] == 'u') {
+		return 8U;
+	}
+	if (__DATE__[0] == 'S') {
+		return 9U;
+	}
+	if (__DATE__[0] == 'O') {
+		return 10U;
+	}
+	if (__DATE__[0] == 'N') {
+		return 11U;
+	}
+	return 12U;
+}
+
 static bool enter_init_mode(void)
 {
 	uint32_t startedAt = HAL_GetTick();
@@ -89,11 +127,50 @@ bool Clock_SetTime(uint8_t hour, uint8_t minute, uint8_t second)
 	return true;
 }
 
+bool Clock_SetDate(uint8_t day, uint8_t month, uint16_t year)
+{
+	uint32_t yearBcd;
+	uint32_t monthBcd;
+	uint32_t dayBcd;
+
+	if (day < 1U || day > 31U || month < 1U || month > 12U
+			|| year < 2000U || year > 2099U) {
+		return false;
+	}
+
+	if (!enter_init_mode()) {
+		return false;
+	}
+
+	yearBcd = to_bcd((uint8_t)(year - 2000U));
+	monthBcd = to_bcd(month);
+	dayBcd = to_bcd(day);
+
+	RTC->DR = (((yearBcd >> 4U) & 0x0FU) << RTC_DR_YT_Pos)
+			| ((yearBcd & 0x0FU) << RTC_DR_YU_Pos)
+			| (((monthBcd >> 4U) & 0x01U) << RTC_DR_MT_Pos)
+			| ((monthBcd & 0x0FU) << RTC_DR_MU_Pos)
+			| (((dayBcd >> 4U) & 0x03U) << RTC_DR_DT_Pos)
+			| ((dayBcd & 0x0FU) << RTC_DR_DU_Pos)
+			| (1U << RTC_DR_WDU_Pos);
+
+	if (!exit_init_mode()) {
+		RTC->WPR = 0xFFU;
+		return false;
+	}
+	RTC->WPR = 0xFFU;
+	clockReady = true;
+	return true;
+}
+
 bool Clock_Init(void)
 {
+	uint8_t buildDay;
+	uint8_t buildMonth;
 	uint8_t buildHour;
 	uint8_t buildMinute;
 	uint8_t buildSecond;
+	uint16_t buildYear;
 
 	HAL_PWR_EnableBkUpAccess();
 	__HAL_RCC_RTC_ENABLE();
@@ -111,18 +188,26 @@ bool Clock_Init(void)
 	RTC->CR &= ~RTC_CR_FMT;
 	RTC->PRER = (RTC_SYNC_PREDIV << RTC_PRER_PREDIV_S_Pos);
 	RTC->PRER |= (RTC_ASYNC_PREDIV << RTC_PRER_PREDIV_A_Pos);
-	RTC->DR = (1U << RTC_DR_WDU_Pos)
-			| (1U << RTC_DR_MU_Pos)
-			| (1U << RTC_DR_DU_Pos);
 	if (!exit_init_mode()) {
 		RTC->WPR = 0xFFU;
 		return false;
 	}
 	RTC->WPR = 0xFFU;
 
+	buildDay = (uint8_t)(((__DATE__[4] == ' ' ? '0' : __DATE__[4]) - '0') * 10
+			+ (__DATE__[5] - '0'));
+	buildMonth = month_from_build_date();
+	buildYear = (uint16_t)((__DATE__[7] - '0') * 1000
+			+ (__DATE__[8] - '0') * 100
+			+ (__DATE__[9] - '0') * 10
+			+ (__DATE__[10] - '0'));
 	buildHour = (uint8_t)(((__TIME__[0] - '0') * 10) + (__TIME__[1] - '0'));
 	buildMinute = (uint8_t)(((__TIME__[3] - '0') * 10) + (__TIME__[4] - '0'));
 	buildSecond = (uint8_t)(((__TIME__[6] - '0') * 10) + (__TIME__[7] - '0'));
+
+	if (!Clock_SetDate(buildDay, buildMonth, buildYear)) {
+		return false;
+	}
 
 	if (!Clock_SetTime(buildHour, buildMinute, buildSecond)) {
 		return false;
@@ -157,4 +242,38 @@ bool Clock_GetTime(ClockTime_t *time)
 	time->minute = from_bcd(minuteBcd);
 	time->second = from_bcd(secondBcd);
 	return true;
+}
+
+bool Clock_GetDate(ClockDate_t *date)
+{
+	uint32_t dateRegister;
+	uint32_t yearBcd;
+	uint32_t monthBcd;
+	uint32_t dayBcd;
+
+	if (date == NULL || !clockReady) {
+		return false;
+	}
+
+	(void)RTC->TR;
+	dateRegister = RTC->DR;
+
+	yearBcd = (((dateRegister & RTC_DR_YT) >> RTC_DR_YT_Pos) << 4U)
+			| ((dateRegister & RTC_DR_YU) >> RTC_DR_YU_Pos);
+	monthBcd = (((dateRegister & RTC_DR_MT) >> RTC_DR_MT_Pos) << 4U)
+			| ((dateRegister & RTC_DR_MU) >> RTC_DR_MU_Pos);
+	dayBcd = (((dateRegister & RTC_DR_DT) >> RTC_DR_DT_Pos) << 4U)
+			| ((dateRegister & RTC_DR_DU) >> RTC_DR_DU_Pos);
+
+	date->year = (uint16_t)(2000U + from_bcd(yearBcd));
+	date->month = from_bcd(monthBcd);
+	date->day = from_bcd(dayBcd);
+	return true;
+}
+
+bool Clock_GetDateTime(ClockDateTime_t *dateTime)
+{
+	return dateTime != NULL
+			&& Clock_GetDate(&dateTime->date)
+			&& Clock_GetTime(&dateTime->time);
 }
