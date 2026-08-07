@@ -1,5 +1,6 @@
 #include "admin_menu.h"
 
+#include "clock.h"
 #include "door_control.h"
 #include "lcd.h"
 #include "main.h"
@@ -12,7 +13,7 @@
 static AdminMenuState_t menuState;
 
 // keyboard input
-static char inputBuffer[5];
+static char inputBuffer[7];
 static uint8_t inputLength;
 static uint32_t feedbackUntil;
 
@@ -35,16 +36,42 @@ static void clear_input(void)
     memset(inputBuffer, 0, sizeof(inputBuffer));
 }
 
+static int is_date_today_or_earlier(uint8_t day, uint8_t month, uint16_t year)
+{
+	ClockDate_t now;
+
+	if (!Clock_GetDate(&now)) {
+		return 0;
+	}
+
+	if (year != now.year) {
+		return year < now.year;
+	}
+	if (month != now.month) {
+		return month < now.month;
+	}
+	return day <= now.day;
+}
+
 static void show_main_menu(void)
 {
     LCD_SendCmd(LCD_CLEAR_DISPLAY);
-    LCD_SendStr("A:TIME B:DUR");
+    LCD_SendStr("A:SCHED B:DUR");
 
     LCD_SendCmd(LCD_SECOND_LINE);
-    LCD_SendStr("C:CFG D:X #:DOOR");
+    LCD_SendStr("C:CFG D:X #:DR");
 }
 
-static void show_time_input(void)
+static void show_schedule_menu(void)
+{
+	LCD_SendCmd(LCD_CLEAR_DISPLAY);
+	LCD_SendStr("A:TIME B:DATE");
+
+	LCD_SendCmd(LCD_SECOND_LINE);
+	LCD_SendStr("*:BACK");
+}
+
+static void show_time_input_with_title(const char *title)
 {
 	char line[17];
 
@@ -59,10 +86,15 @@ static void show_time_input(void)
 	);
 
     LCD_SendCmd(LCD_CLEAR_DISPLAY);
-    LCD_SendStr("SET TIME HHMM");
+    LCD_SendStr(title);
 
     LCD_SendCmd(LCD_SECOND_LINE);
     LCD_SendStr(line);
+}
+
+static void show_time_input(void)
+{
+	show_time_input_with_title("SET TIME HHMM");
 }
 
 static void show_duration_input(void)
@@ -78,6 +110,29 @@ static void show_duration_input(void)
     LCD_SendStr(line);
 }
 
+static void show_date_input(void)
+{
+	char line[17];
+
+	snprintf(
+		line,
+		sizeof(line),
+		"%c%c/%c%c/%c%c",
+		inputLength > 0U ? inputBuffer[0] : '_',
+		inputLength > 1U ? inputBuffer[1] : '_',
+		inputLength > 2U ? inputBuffer[2] : '_',
+		inputLength > 3U ? inputBuffer[3] : '_',
+		inputLength > 4U ? inputBuffer[4] : '_',
+		inputLength > 5U ? inputBuffer[5] : '_'
+	);
+
+	LCD_SendCmd(LCD_CLEAR_DISPLAY);
+	LCD_SendStr("DATE DDMMYY");
+
+	LCD_SendCmd(LCD_SECOND_LINE);
+	LCD_SendStr(line);
+}
+
 static void show_feedback(const char *message)
 {
 	LCD_SendCmd(LCD_CLEAR_DISPLAY);
@@ -85,6 +140,56 @@ static void show_feedback(const char *message)
 
 	menuState = ADMIN_MENU_FEEDBACK;
 	feedbackUntil = HAL_GetTick() + FEEDBACK_DURATION_MS;
+}
+
+static void show_current_config(void)
+{
+	char line[17];
+	const ManagementConfig_t *config = ManagementConfig_Get();
+
+	if (config->useSpecificDate) {
+		LCD_SendCmd(LCD_CLEAR_DISPLAY);
+		snprintf(
+			line,
+			sizeof(line),
+			"%02u/%02u/%02u",
+			(unsigned int)config->unlockDay,
+			(unsigned int)config->unlockMonth,
+			(unsigned int)(config->unlockYear % 100U)
+		);
+		LCD_SendStr(line);
+
+		LCD_SendCmd(LCD_SECOND_LINE);
+		snprintf(
+			line,
+			sizeof(line),
+			"%02u:%02u %us",
+			(unsigned int)config->specificDateOpenHour,
+			(unsigned int)config->specificDateOpenMinute,
+			(unsigned int)config->specificDateDurationSeconds
+		);
+		LCD_SendStr(line);
+		return;
+	}
+
+	LCD_SendCmd(LCD_CLEAR_DISPLAY);
+	snprintf(
+		line,
+		sizeof(line),
+		"%02u:%02u %us",
+		(unsigned int)config->unlockHour,
+		(unsigned int)config->unlockMinute,
+		(unsigned int)config->unlockDurationSeconds
+	);
+	LCD_SendStr(line);
+
+	LCD_SendCmd(LCD_SECOND_LINE);
+	if (!config->scheduleEnabled) {
+		LCD_SendStr("SCHEDULE OFF");
+		return;
+	}
+
+	LCD_SendStr("DAILY");
 }
 
 // can be used everywhere
@@ -100,8 +205,8 @@ static void handle_main_menu(uint8_t key)
     switch (key) {
     case 'A':
         clear_input();
-        menuState = ADMIN_MENU_SET_TIME;
-        show_time_input();
+        menuState = ADMIN_MENU_SCHEDULE;
+        show_schedule_menu();
         break;
 
     case 'B':
@@ -145,6 +250,32 @@ static void handle_main_menu(uint8_t key)
     }
 }
 
+static void handle_schedule_menu(uint8_t key)
+{
+	switch (key) {
+	case 'A':
+		clear_input();
+		menuState = ADMIN_MENU_SET_TIME;
+		show_time_input();
+		break;
+
+	case 'B':
+		clear_input();
+		menuState = ADMIN_MENU_SET_DATE;
+		show_date_input();
+		break;
+
+	case '*':
+		clear_input();
+		menuState = ADMIN_MENU_MAIN;
+		show_main_menu();
+		break;
+
+	default:
+		break;
+	}
+}
+
 static void handle_time_input(uint8_t key)
 {
     if (key >= '0' && key <= '9') {
@@ -159,8 +290,8 @@ static void handle_time_input(uint8_t key)
 
     if (key == '*') {
         clear_input();
-        menuState = ADMIN_MENU_MAIN;
-        show_main_menu();
+        menuState = ADMIN_MENU_SCHEDULE;
+        show_schedule_menu();
         return;
     }
 
@@ -222,35 +353,130 @@ static void handle_duration_input(uint8_t key)
     }
 }
 
-static void show_current_config(void)
+static void handle_date_input(uint8_t key)
 {
-    char line[17];
+	if (key >= '0' && key <= '9') {
+		if (inputLength < 6) {
+			inputBuffer[inputLength] = (char)key;
+			inputLength++;
+			inputBuffer[inputLength] = '\0';
+			show_date_input();
+		}
+		return;
+	}
 
-    const ManagementConfig_t *config =
-        ManagementConfig_Get();
+	if (key == '*') {
+		clear_input();
+		menuState = ADMIN_MENU_SCHEDULE;
+		show_schedule_menu();
+		return;
+	}
 
-    LCD_SendCmd(LCD_CLEAR_DISPLAY);
+	if (key == '#' && inputLength == 6) {
+		uint8_t day =
+				(uint8_t)((inputBuffer[0] - '0') * 10 +
+						(inputBuffer[1] - '0'));
+		uint8_t month =
+				(uint8_t)((inputBuffer[2] - '0') * 10 +
+						(inputBuffer[3] - '0'));
+		uint16_t year =
+				(uint16_t)(2000U
+						+ (uint16_t)((inputBuffer[4] - '0') * 10)
+						+ (uint16_t)(inputBuffer[5] - '0'));
 
-    snprintf(
-        line,
-        sizeof(line),
-        "TIME %02u:%02u",
-		(unsigned int)config->unlockHour,
-		(unsigned int)config->unlockMinute
-    );
+		if (day == 0U && month == 0U && year == 2000U) {
+			ManagementConfig_ClearUnlockDate();
+			ManagementConfig_SetScheduleEnabled(true);
+			show_feedback("DAILY MODE");
+		} else if (is_date_today_or_earlier(day, month, year)) {
+			show_feedback("USE TOMORROW");
+		} else if (ManagementConfig_SetUnlockDate(day, month, year)) {
+			clear_input();
+			menuState = ADMIN_MENU_SET_DATE_TIME;
+			show_time_input_with_title("DATE TIME HHMM");
+		} else {
+			show_feedback("INVALID DATE");
+		}
 
-    LCD_SendStr(line);
+		clear_input();
+	}
+}
 
-    LCD_SendCmd(LCD_SECOND_LINE);
+static void handle_date_time_input(uint8_t key)
+{
+	if (key >= '0' && key <= '9') {
+		if (inputLength < 4) {
+			inputBuffer[inputLength] = (char)key;
+			inputLength++;
+			inputBuffer[inputLength] = '\0';
+			show_time_input_with_title("DATE TIME HHMM");
+		}
+		return;
+	}
 
-    snprintf(
-        line,
-        sizeof(line),
-        "DURATION %us",
-		(unsigned int)config->unlockDurationSeconds
-    );
+	if (key == '*') {
+		clear_input();
+		menuState = ADMIN_MENU_SET_DATE;
+		show_date_input();
+		return;
+	}
 
-    LCD_SendStr(line);
+	if (key == '#' && inputLength == 4) {
+		uint8_t hour =
+			(uint8_t)((inputBuffer[0] - '0') * 10 +
+					(inputBuffer[1] - '0'));
+		uint8_t minute =
+			(uint8_t)((inputBuffer[2] - '0') * 10 +
+					(inputBuffer[3] - '0'));
+
+		if (ManagementConfig_SetSpecificDateOpenTime(hour, minute)) {
+			clear_input();
+			menuState = ADMIN_MENU_SET_DATE_DURATION;
+			show_duration_input();
+		} else {
+			show_feedback("INVALID TIME");
+			clear_input();
+		}
+	}
+}
+
+static void handle_date_duration_input(uint8_t key)
+{
+	if (key >= '0' && key <= '9') {
+		if (inputLength < 3) {
+			inputBuffer[inputLength] = (char)key;
+			inputLength++;
+			inputBuffer[inputLength] = '\0';
+			show_duration_input();
+		}
+		return;
+	}
+
+	if (key == '*') {
+		clear_input();
+		menuState = ADMIN_MENU_SET_DATE_TIME;
+		show_time_input_with_title("DATE TIME HHMM");
+		return;
+	}
+
+	if (key == '#' && inputLength > 0) {
+		uint16_t duration = 0;
+
+		for (uint8_t i = 0; i < inputLength; i++) {
+			duration =
+				(uint16_t)(duration * 10U +
+						(uint16_t)(inputBuffer[i] - '0'));
+		}
+
+		if (ManagementConfig_SetSpecificDateDuration(duration)) {
+			ManagementConfig_SetScheduleEnabled(true);
+			show_feedback("DATE SAVED");
+		} else {
+			show_feedback("INVALID VALUE");
+		}
+
+		clear_input();
+	}
 }
 
 void AdminMenu_Update(uint8_t key)
@@ -272,25 +498,41 @@ void AdminMenu_Update(uint8_t key)
         handle_main_menu(key);
         break;
 
-    case ADMIN_MENU_SET_TIME:
-        handle_time_input(key);
-        break;
+	    case ADMIN_MENU_SCHEDULE:
+	        handle_schedule_menu(key);
+	        break;
 
-    case ADMIN_MENU_SET_DURATION:
-        handle_duration_input(key);
-        break;
+	    case ADMIN_MENU_SET_TIME:
+	        handle_time_input(key);
+	        break;
 
-    case ADMIN_MENU_SHOW_CONFIG:
-        if (key == '*') {
-            menuState = ADMIN_MENU_MAIN;
-            show_main_menu();
-        } else if (key == 'D') {
-            ManagementConfig_ExitAdminMode();
-            menuState = ADMIN_MENU_INACTIVE;
-        }
-        break;
+	    case ADMIN_MENU_SET_DATE:
+	        handle_date_input(key);
+	        break;
 
-    case ADMIN_MENU_INACTIVE:
+	    case ADMIN_MENU_SET_DATE_TIME:
+	        handle_date_time_input(key);
+	        break;
+
+	    case ADMIN_MENU_SET_DATE_DURATION:
+	        handle_date_duration_input(key);
+	        break;
+
+	    case ADMIN_MENU_SET_DURATION:
+	        handle_duration_input(key);
+	        break;
+
+	    case ADMIN_MENU_SHOW_CONFIG:
+	        if (key == '*') {
+	            menuState = ADMIN_MENU_MAIN;
+	            show_main_menu();
+	        } else if (key == 'D') {
+	            ManagementConfig_ExitAdminMode();
+	            menuState = ADMIN_MENU_INACTIVE;
+	        }
+	        break;
+
+	    case ADMIN_MENU_INACTIVE:
     default:
         break;
     }
